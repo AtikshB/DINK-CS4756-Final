@@ -1,27 +1,26 @@
-import os
-from collections import defaultdict
+from os import path, listdir
+import numpy as np
+import cv2
+from util import preprocess, get_action_name
 
-class DataLoader:
-    '''Class to load trajectories from a folder.'''
+import math
+class AtariDataset():
+    '''
+        Class for loading the dataset of Atari replays.
+        Source: Atari Grand Challenge repo'''
 
-    def __init__(self, dir):
-        self.dir = dir
-        self.trajectories = []
-        pass
+    TRAJS_SUBDIR = 'trajectories'
+    SCREENS_SUBDIR = 'screens'
 
-    def load_trajectories(self, open_ai = False) -> list:
-        '''Load trajectories into memory.
-
-        open_ai (bool): If True, the action space maps to OpenAI Gym's action space.
+    def __init__(self, data_path):
         
-        Returns: list of tuples (frame, reward, score, terminal, action)'''
-        # Read all text files from folder
-        files = os.listdir(self.dir)
+        '''
+            Loads the dataset trajectories into memory. 
+            data_path is the root of the dataset (the folder, which contains
+            the 'screens' and 'trajectories' folders. 
+        '''
 
-        count = 0
-        action_space = defaultdict(int)
-
-        open_ai_mappings = {
+        self.open_ai_mappings = {
             0: 0,
             1: 1,
             3: 2,
@@ -39,28 +38,74 @@ class DataLoader:
             16: 0
         }
 
-        for file in files:
-            file_path = os.path.join(self.dir, file)
-            with open(file_path, 'r') as f:
-                lines = f.readlines()[2:]
-                trajectory = []
-                for line in lines:
-                    frame, reward, score, terminal, action = line.strip().split(",")
-                    terminal_bool = terminal == 'True'
-
-                    if open_ai:
-                        action = open_ai_mappings[int(action)]
-                    else:
-                        action = int(action)
-
-                    trajectory.append((int(frame), int(reward), int(score), terminal_bool, int(action)))
-                    action_space[int(action)] += 1
-
-                self.trajectories.append(trajectory)
-            count += 1
+        self.trajs_path = path.join(data_path, AtariDataset.TRAJS_SUBDIR)       
+        self.screens_path = path.join(data_path, AtariDataset.SCREENS_SUBDIR)
+    
+        #check that the we have the trajs where expected
+        assert path.exists(self.trajs_path)
         
-        print("Trajectories loaded: " + str(count))
-        print("Action space: " + str(len(action_space)))
+        self.trajectories = self.load_trajectories()
 
-    def get_trajectories(self):
-        return self.trajectories
+
+    def load_trajectories(self):
+
+        trajectories = {}
+        for game in listdir(self.trajs_path):
+            trajectories[game] = {}
+            game_dir = path.join(self.trajs_path, game)
+            for traj in listdir(game_dir):
+                curr_traj = []
+                with open(path.join(game_dir, traj)) as f:
+                    for i,line in enumerate(f):
+                        #first line is the metadata, second is the header
+                        if i > 1:
+                            #TODO will fix the spacing and True/False/integer in the next replay session
+                            #frame,reward,score,terminal, action
+                    
+                            curr_data = line.rstrip('\n').replace(" ","").split(',')
+                            curr_trans = {}
+                            curr_trans['frame']    = int(curr_data[0])
+                            curr_trans['reward']   = int(curr_data[1])
+                            curr_trans['score']    = int(curr_data[2])
+                            curr_trans['terminal'] = (curr_data[3] == "True")
+                            curr_trans['action']   = self.open_ai_mappings[(curr_data[4])]
+                            curr_traj.append(curr_trans)
+                trajectories[game][int(traj.split('.txt')[0])] = curr_traj
+        return trajectories
+                   
+
+    def compile_data(self, dataset_path, game, score_lb=0, score_ub=math.inf, max_nb_transitions=None):
+
+        data = []
+        shuffled_trajs = np.array(list(self.trajectories.keys()))
+        np.random.shuffle(shuffled_trajs)
+
+        for t in shuffled_trajs:
+            st_dir   = path.join(self.screens_path, str(t))
+            cur_traj = self.trajectories[t]
+            cur_traj_len = len(listdir(st_dir))
+
+            # cut off trajectories with final score beyound the limit
+            if not score_lb <= cur_traj[-1]['score'] <= score_ub:
+                continue
+
+            #we're here if the trajectory is within lb/ub
+            for pid in range(0, cur_traj_len):
+
+                #screens are numbered from 1, transitions from 0
+                #TODO change screen numbering from zero during next data replay
+                state = preprocess(cv2.imread(path.join(st_dir, str(pid) + '.png'), cv2.IMREAD_GRAYSCALE))
+
+                data.append({'action': get_action_name(cur_traj[pid]['action']),
+                             'state':  state,
+                             'reward': cur_traj[pid]['reward'],
+                             'terminal': cur_traj[pid]['terminal'] == 1
+                            })
+
+                # if nb_transitions is None, we want the whole dataset limited only by lb and ub
+                if max_nb_transitions and len(data) == max_nb_transitions:
+                    print("Total frames: %d" % len(data))
+                    return data
+
+        #we're here if we need all the data
+        return data
