@@ -1,5 +1,7 @@
 import bc
 import torch
+from expert.preprocessing.stack_frame import stack_frames
+
 
 def interact(
     env, learner, expert, observations, actions, checkpoint_path, seed, num_epochs=100
@@ -11,14 +13,17 @@ def interact(
         total_learner_reward = 0
         done = False
         obs = env.reset(seed=seed)
+        obs_proc = stack_frames(None, obs, True)
         episode_observations = []
         expert_actions = []
         while not done:
             with torch.no_grad():
                 action = learner.get_action(obs)
-                expert_actions.append(expert.get_expert_action(obs))
+                expert_actions.append(expert.act(obs_proc))
             episode_observations.append(obs)
-            obs, reward, done, _ = env.step(action)
+            next_obs, reward, done, _ = env.step(action)
+            obs = next_obs
+            obs_proc = stack_frames(obs_proc, next_obs, False)
             total_learner_reward += reward
             if done:
                 break

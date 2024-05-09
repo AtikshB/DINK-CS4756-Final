@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 import random
-from utils.replay_buffer import ReplayBuffer
+from expert.utils.replay_buffer import ReplayBuffer
 
 
 class DQNAgent:
@@ -48,12 +48,13 @@ class DQNAgent:
         self.lr = lr
         self.update_every = update_every
         self.replay_after = replay_after
-        self.DQN = model
+        self.model = model
         self.tau = tau
+        self.best_loss = float("inf")
 
         # Q-Network
-        self.policy_net = self.DQN(input_shape, action_size).to(self.device)
-        self.target_net = self.DQN(input_shape, action_size).to(self.device)
+        self.policy_net = self.model(input_shape, action_size).to(self.device)
+        self.target_net = self.model(input_shape, action_size).to(self.device)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
 
         # Replay memory
@@ -113,6 +114,10 @@ class DQNAgent:
         self.optimizer.step()
 
         self.soft_update(self.policy_net, self.target_net, self.tau)
+        if loss.item() < self.best_loss:
+            print(loss.item())
+            self.save_model("../models/expert_DQN.pth")
+            self.best_loss = loss.item()
 
     # θ'=θ×τ+θ'×(1−τ)
     def soft_update(self, policy_model, target_model, tau):
@@ -122,3 +127,9 @@ class DQNAgent:
             target_param.data.copy_(
                 tau * policy_param.data + (1.0 - tau) * target_param.data
             )
+
+    def save_model(self, path):
+        torch.save(self.model, path)
+
+    def load_model(self, path):
+        self.model = torch.load(path)
