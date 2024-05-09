@@ -1,4 +1,4 @@
 __pycache__
-space_invaders/
+space-inv/
 atari_v1/
-models/
+models/*

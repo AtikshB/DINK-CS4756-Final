@@ -7,6 +7,7 @@ import numpy as np
 
 def train(learner, observations, actions, checkpoint_path, num_epochs=100):
     print("Training the learner")
+    torch.cuda.empty_cache()
     best_loss = float("inf")
     best_model_state = None
     loss_fn = torch.nn.MSELoss()
