@@ -7,9 +7,9 @@ import torch.nn.functional as F
 class SpaceInvLearner(nn.Module):
     def __init__(self, env, hidden_dim=256, random_prob=0.0):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.observation_space.shape).prod(), hidden_dim)
+        self.fc1 = nn.Linear(210*160, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc_out = nn.Linear(hidden_dim, np.prod(env.action_space.shape))
+        self.fc_out = nn.Linear(hidden_dim, np.prod(env.action_space.n))
 
         self.env = env
         self.random_prob = random_prob

@@ -1,7 +1,7 @@
 from os import path, listdir
 import numpy as np
 import cv2
-from util import preprocess, get_action_name
+import torch
 
 import math
 class AtariDataset():
@@ -9,8 +9,8 @@ class AtariDataset():
         Class for loading the dataset of Atari replays.
         Source: Atari Grand Challenge repo'''
 
-    TRAJS_SUBDIR = 'trajectories'
-    SCREENS_SUBDIR = 'screens'
+    TRAJS_SUBDIR = 'trajectories/spaceinvaders'
+    SCREENS_SUBDIR = 'screens/spaceinvaders'
 
     def __init__(self, data_path):
         
@@ -40,43 +40,48 @@ class AtariDataset():
 
         self.trajs_path = path.join(data_path, AtariDataset.TRAJS_SUBDIR)       
         self.screens_path = path.join(data_path, AtariDataset.SCREENS_SUBDIR)
-    
+
         #check that the we have the trajs where expected
         assert path.exists(self.trajs_path)
         
         self.trajectories = self.load_trajectories()
 
 
-    def load_trajectories(self):
+    def load_trajectories(self, top = 1):
+        
+        # trajectories is a list of tuples (traj_id, traj_data)
+        trajectories = []
+        for traj in listdir(self.trajs_path):
+            traj_path = path.join(self.trajs_path, traj)
+            curr_traj = []
+            with open(traj_path) as f:
+                for i,line in enumerate(f):
+                    #first line is the metadata, second is the header
+                    if i > 1:
+                        curr_data = line.rstrip('\n').replace(" ","").split(',')
+                        curr_trans = {}
+                        curr_trans['frame']    = int(curr_data[0])
+                        curr_trans['reward']   = int(curr_data[1])
+                        curr_trans['score']    = int(curr_data[2])
+                        curr_trans['terminal'] = (curr_data[3] == "True")
+                        curr_trans['action']   = self.open_ai_mappings[int(curr_data[4])]
+                        curr_traj.append(curr_trans)
+            trajectories.append((int(traj.split('.txt')[0]), curr_traj))
+        
+        #sort by max score
+        trajectories.sort(key=lambda x: x[1][-1]['score'], reverse=True)
 
-        trajectories = {}
-        for game in listdir(self.trajs_path):
-            trajectories[game] = {}
-            game_dir = path.join(self.trajs_path, game)
-            for traj in listdir(game_dir):
-                curr_traj = []
-                with open(path.join(game_dir, traj)) as f:
-                    for i,line in enumerate(f):
-                        #first line is the metadata, second is the header
-                        if i > 1:
-                            #TODO will fix the spacing and True/False/integer in the next replay session
-                            #frame,reward,score,terminal, action
-                    
-                            curr_data = line.rstrip('\n').replace(" ","").split(',')
-                            curr_trans = {}
-                            curr_trans['frame']    = int(curr_data[0])
-                            curr_trans['reward']   = int(curr_data[1])
-                            curr_trans['score']    = int(curr_data[2])
-                            curr_trans['terminal'] = (curr_data[3] == "True")
-                            curr_trans['action']   = self.open_ai_mappings[(curr_data[4])]
-                            curr_traj.append(curr_trans)
-                trajectories[game][int(traj.split('.txt')[0])] = curr_traj
-        return trajectories
+        top_trajs = dict(trajectories[:top])
+        print(len(top_trajs))
+        return top_trajs
                    
 
-    def compile_data(self, dataset_path, game, score_lb=0, score_ub=math.inf, max_nb_transitions=None):
+    def compile_data(self):
+        ''' Read in screenshots to add states to the dataset.
+        Returns (observations, actions)'''
 
-        data = []
+        observations = []
+        actions = []
         shuffled_trajs = np.array(list(self.trajectories.keys()))
         np.random.shuffle(shuffled_trajs)
 
@@ -85,27 +90,14 @@ class AtariDataset():
             cur_traj = self.trajectories[t]
             cur_traj_len = len(listdir(st_dir))
 
-            # cut off trajectories with final score beyound the limit
-            if not score_lb <= cur_traj[-1]['score'] <= score_ub:
-                continue
-
-            #we're here if the trajectory is within lb/ub
             for pid in range(0, cur_traj_len):
 
-                #screens are numbered from 1, transitions from 0
-                #TODO change screen numbering from zero during next data replay
-                state = preprocess(cv2.imread(path.join(st_dir, str(pid) + '.png'), cv2.IMREAD_GRAYSCALE))
+                # Load the state in color
+                state = (cv2.imread(path.join(st_dir, str(pid) + '.png'), cv2.IMREAD_GRAYSCALE)).flatten()
 
-                data.append({'action': get_action_name(cur_traj[pid]['action']),
-                             'state':  state,
-                             'reward': cur_traj[pid]['reward'],
-                             'terminal': cur_traj[pid]['terminal'] == 1
-                            })
+                assert state.shape == (210*160,)
 
-                # if nb_transitions is None, we want the whole dataset limited only by lb and ub
-                if max_nb_transitions and len(data) == max_nb_transitions:
-                    print("Total frames: %d" % len(data))
-                    return data
+                observations.append(state)
+                actions.append(cur_traj[pid]['action'])
 
-        #we're here if we need all the data
-        return data
+        return observations, actions
