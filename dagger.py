@@ -1,6 +1,6 @@
 import bc
 import torch
-from expert.preprocessing.stack_frame import stack_frames
+from expert.stack_frame import stack_frames
 
 
 def interact(
@@ -18,7 +18,7 @@ def interact(
         expert_actions = []
         while not done:
             with torch.no_grad():
-                action = learner.get_action(obs)
+                action = learner.get_action(torch.Tensor([obs]).to(device))
                 expert_actions.append(expert.act(obs_proc))
             episode_observations.append(obs)
             next_obs, reward, done, _ = env.step(action)

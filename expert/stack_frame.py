@@ -11,8 +11,6 @@ def preprocess_frame(screen, exclude, output):
         exclude (tuple): Section to be croped (UP, RIGHT, DOWN, LEFT)
         output (int): Size of output image
     """
-    # TConver image to gray scale
-    screen = cv2.cvtColor(screen, cv2.COLOR_RGB2GRAY)
 
     # Crop screen[Up: Down, Left: right]
     screen = screen[exclude[0] : exclude[2], exclude[3] : exclude[1]]

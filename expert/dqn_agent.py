@@ -3,7 +3,8 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 import random
-from expert.utils.replay_buffer import ReplayBuffer
+from expert.replay_buffer import ReplayBuffer
+from expert.dqn_cnn import DQNCnn
 
 
 class DQNAgent:
