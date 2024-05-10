@@ -19,7 +19,7 @@ def interact(
         while not done:
             with torch.no_grad():
                 action = learner.get_action(torch.Tensor([obs]).to(device))
-                expert_actions.append(expert.act(obs_proc))
+                expert_actions.append(expert.act(obs_proc)[0])
             episode_observations.append(obs)
             next_obs, reward, done, _ = env.step(action)
             obs = next_obs
@@ -32,8 +32,8 @@ def interact(
         print(f"After interaction {episode}, reward = {total_learner_reward}")
         bc.train(
             learner,
-            torch.Tensor(observations).to(device),
-            torch.Tensor(actions).to(device),
+            observations,
+            actions,
             checkpoint_path,
             num_epochs,
         )

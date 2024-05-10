@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 
 
-def preprocess_frame(screen, exclude, output):
+def preprocess_frame(screen, exclude, output, gray=True):
     """Preprocess Image.
 
     Params
@@ -11,6 +11,10 @@ def preprocess_frame(screen, exclude, output):
         exclude (tuple): Section to be croped (UP, RIGHT, DOWN, LEFT)
         output (int): Size of output image
     """
+
+    # TConver image to gray scale
+    if not gray:
+        screen = cv2.cvtColor(screen, cv2.COLOR_RGB2GRAY)
 
     # Crop screen[Up: Down, Left: right]
     screen = screen[exclude[0] : exclude[2], exclude[3] : exclude[1]]
@@ -44,8 +48,8 @@ def stack_frame(stacked_frames, frame, is_new):
     return stacked_frames
 
 
-def stack_frames(frames, state, is_new=False):
-    frame = preprocess_frame(state, (8, -12, -12, 4), 84)
+def stack_frames(frames, state, is_new=False, gray=True):
+    frame = preprocess_frame(state, (8, -12, -12, 4), 84, gray=gray)
     frames = stack_frame(frames, frame, is_new)
 
     return frames
