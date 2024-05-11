@@ -47,7 +47,7 @@ class AtariDataset:
 
         self.trajectories = self.load_trajectories()
 
-    def load_trajectories(self, top=15):
+    def load_trajectories(self, top=11):
         top = self.top
 
         # trajectories is a list of tuples (traj_id, traj_data)

@@ -8,29 +8,25 @@ import random
 
 
 class DQN(nn.Module):
-    def __init__(self, input_shape, num_actions, gamma=0.99):
+    def __init__(
+        self,
+        input_size,
+        num_actions,
+        gamma=0.5,
+        device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+    ):
         """
         Initialize the DQN model.
 
         Args:
             input_shape (tuple): Shape of the input state (without batch dimension).
             num_actions (int): Number of possible actions.
-            gamma (float): Discount factor (default: 0.99).
+            gamma (float): Discount factor (default: 0.5).
         """
         super(DQN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=8, stride=4)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
-        conv_out_size = self._get_conv_out(input_shape)
-        self.fc1 = nn.Linear(conv_out_size, 512)
-        self.fc2 = nn.Linear(512, num_actions)
+        self.fc1 = nn.Linear(input_size, 512).to(device)
+        self.fc2 = nn.Linear(512, num_actions).to(device)
         self.gamma = gamma
-
-    def _get_conv_out(self, shape):
-        o = self.conv1(torch.zeros(1, 1, *shape))
-        o = self.conv2(o)
-        o = self.conv3(o)
-        return int(torch.prod(torch.tensor(o.size())))
 
     def forward(self, x):
         """
@@ -42,12 +38,9 @@ class DQN(nn.Module):
         Returns:
             tensor: Q-values for each action.
         """
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+        x = F.relu(self.fc2(x))
         return x
 
     def get_max_q(self, states):
@@ -60,6 +53,7 @@ class DQN(nn.Module):
         Returns:
             tensor: Maximum Q-values for each state.
         """
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         q_vals = self.forward(states)
         max_qs, _ = torch.max(q_vals, dim=1)
         return max_qs
@@ -89,7 +83,8 @@ class DQN(nn.Module):
         Returns:
             int: Selected action.
         """
-        state = state.float()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        state = state.to(device).float()
         q_values = self.forward(state)
         if torch.rand(1).item() < eps:
             return torch.randint(0, q_values.size(1), (1,)).item()
@@ -127,45 +122,63 @@ def train(
     num_episodes=100,
     lr=1e-3,
     add_data_every=4,
+    device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 ):
     optimizer = optim.Adam(network.parameters(), lr=lr)
     data = list(zip(observations, actions, rewards, next_observations, dones))
-
+    best_loss = float("inf")
     for i in tqdm(range(num_episodes)):
         # Add new data to the dataset after the first epoch and every 'add_data_every' epochs
         if i == 0 or (i % add_data_every == 0):
-            new_data = collect_data(network, env, num_episodes=1)  # Collect new data
+            new_data = collect_data(network, env, num_episodes=5)  # Collect new data
             data.extend(new_data)  # Add new data to the dataset
 
         # Shuffle the dataset before each epoch
         random.shuffle(data)
-
+        total_loss = 0
         # Mini-batch training
         for batch_start in range(0, len(data), batch_size):
             batch = data[batch_start : batch_start + batch_size]
             obs_batch, actions_batch, rewards_batch, next_states_batch, dones_batch = (
                 zip(*batch)
             )
-            obs_batch = torch.tensor(obs_batch)
-            actions_batch = torch.tensor(actions_batch)
-            rewards_batch = torch.tensor(rewards_batch)
-            next_states_batch = torch.tensor(next_states_batch)
-            dones_batch = torch.tensor(dones_batch)
+            obs_batch = torch.tensor(
+                np.array(obs_batch), dtype=torch.float32, device=device
+            )
+            actions_batch = torch.tensor(
+                np.array(actions_batch), dtype=torch.long, device=device
+            )
+            rewards_batch = torch.tensor(
+                np.array(rewards_batch), dtype=torch.float32, device=device
+            )
+            next_states_batch = torch.tensor(
+                np.array(next_states_batch), dtype=torch.float32, device=device
+            )
+            dones_batch = torch.tensor(
+                np.array(dones_batch), dtype=torch.float32, device=device
+            )
 
-            q_vals = network(obs_batch)[torch.arange(len(batch)), actions_batch]
+            q_vals = network(obs_batch)[
+                torch.arange(actions_batch.shape[0]), actions_batch
+            ]
             target_q_values = network.get_targets(
                 rewards_batch, next_states_batch, dones_batch
             )
             optimizer.zero_grad()
-            loss = torch.nn.functional.mse_loss(q_vals, target_q_values)
+            loss_fn = torch.nn.MSELoss()
+            loss = loss_fn(q_vals, target_q_values)
             loss.backward()
             optimizer.step()
 
+            total_loss += loss.item() * actions_batch.shape[0]
+        episode_loss = total_loss / len(data)
+        if episode_loss < best_loss:
+            print("New minimum: ", episode_loss)
+            best_model_state = network.state_dict()
     # Save final agent
-    torch.save(network, save_path)
+    torch.save(best_model_state, save_path)
 
 
-# Example function to collect new data
 def collect_data(network, env, num_episodes=1):
     new_data = []
     for _ in range(num_episodes):
@@ -176,6 +189,6 @@ def collect_data(network, env, num_episodes=1):
                 torch.tensor(obs).unsqueeze(0), eps=0.0
             )  # Greedy action
             next_obs, reward, done, _ = env.step(action)
-            new_data.append((obs, action, reward, next_obs, done))
+            new_data.append((obs.flatten(), action, reward, next_obs.flatten(), done))
             obs = next_obs
     return new_data
