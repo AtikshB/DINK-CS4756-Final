@@ -12,7 +12,8 @@ class DQN(nn.Module):
         self,
         input_size,
         num_actions,
-        gamma=0.5,
+        gamma=0.99,
+        eps=0.01,
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     ):
         """
@@ -27,6 +28,10 @@ class DQN(nn.Module):
         self.fc1 = nn.Linear(input_size, 512).to(device)
         self.fc2 = nn.Linear(512, num_actions).to(device)
         self.gamma = gamma
+        self.eps = eps
+
+        self.test_scores = []
+        self.test_loss = []
 
     def forward(self, x):
         """
@@ -58,20 +63,6 @@ class DQN(nn.Module):
         max_qs, _ = torch.max(q_vals, dim=1)
         return max_qs
 
-    def get_eps(self, eps_param, t):
-        """
-        Get the epsilon value for epsilon-greedy action selection.
-
-        Args:
-            eps_param (float): Initial epsilon value.
-            t (int): Time step.
-
-        Returns:
-            float: Epsilon value.
-        """
-        eps = eps_param**t
-        return max(0.001, eps)
-
     def get_action(self, state, eps):
         """
         Get action using epsilon-greedy policy.
@@ -85,11 +76,13 @@ class DQN(nn.Module):
         """
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         state = state.to(device).float()
+        
         q_values = self.forward(state)
-        if torch.rand(1).item() < eps:
-            return torch.randint(0, q_values.size(1), (1,)).item()
-        else:
-            return q_values.argmax().item()
+        q_max = q_values.argmax().item()
+        d = q_values.shape[0]
+        action = np.random.choice([np.random.randint(d), q_max], p=[eps, 1 - eps])
+
+        return action
 
     @torch.no_grad()
     def get_targets(self, rewards, next_states, dones):
@@ -172,8 +165,24 @@ def train(
 
             total_loss += loss.item() * actions_batch.shape[0]
         episode_loss = total_loss / len(data)
+        network.test_loss.append(episode_loss)
+        ## Do a validation run
+        val_obs = env.reset()
+        val_done = False
+        sum_reward = 0
+        while not val_done:
+            with torch.no_grad():
+                val_action = network.get_action(torch.Tensor([val_obs]).to(device), eps=0.00)
+            val_obs, reward, val_done, info = env.step(val_action)
+            sum_reward += reward
+            if val_done:
+                break
+        network.test_scores.append(sum_reward)
+        print("Reward: ", sum_reward)
+
         if episode_loss < best_loss:
             print("New minimum: ", episode_loss)
+            best_loss = episode_loss
             best_model_state = network.state_dict()
     # Save final agent
     torch.save(best_model_state, save_path)
@@ -185,9 +194,10 @@ def collect_data(network, env, num_episodes=1):
         obs = env.reset()
         done = False
         while not done:
-            action = network.get_action(
-                torch.tensor(obs).unsqueeze(0), eps=0.0
-            )  # Greedy action
+            with torch.no_grad():
+                action = network.get_action(
+                torch.tensor(obs).unsqueeze(0), eps=network.eps
+                )  # Greedy action
             next_obs, reward, done, _ = env.step(action)
             new_data.append((obs.flatten(), action, reward, next_obs.flatten(), done))
             obs = next_obs
