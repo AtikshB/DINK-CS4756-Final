@@ -4,10 +4,18 @@ from expert.stack_frame import stack_frames
 
 
 def interact(
-    env, learner, expert, observations, actions, checkpoint_path, seed, num_epochs=100, tqdm_disable=False
+    env,
+    learner,
+    expert,
+    observations,
+    actions,
+    checkpoint_path,
+    seed,
+    num_epochs=100,
+    tqdm_disable=False,
 ):
 
-    NUM_INTERACTIONS = 20
+    NUM_INTERACTIONS = 25
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     for episode in range(NUM_INTERACTIONS):
         total_learner_reward = 0
@@ -20,7 +28,7 @@ def interact(
             with torch.no_grad():
                 action = learner.get_action(torch.Tensor([obs]).to(device))
                 expert_actions.append(expert.act(obs_proc)[0])
-            episode_observations.append(obs)
+            episode_observations.append(obs.flatten())
             next_obs, reward, done, _ = env.step(action)
             obs = next_obs
             obs_proc = stack_frames(obs_proc, next_obs, False)

@@ -5,6 +5,7 @@ from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 from torch import nn
 import torch.nn.functional as F
+import random
 
 
 class SpaceInvLearner(nn.Module):
@@ -31,7 +32,9 @@ class SpaceInvLearner(nn.Module):
         return np.array(action.cpu().detach().argmax())
 
 
-def train(learner, observations, actions, checkpoint_path, num_epochs=100, tqdm_disable=False):
+def train(
+    learner, observations, actions, checkpoint_path, num_epochs=100, tqdm_disable=False
+):
     print("Training the learner")
     torch.cuda.empty_cache()
     best_loss = float("inf")
@@ -39,19 +42,19 @@ def train(learner, observations, actions, checkpoint_path, num_epochs=100, tqdm_
     loss_fn = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(learner.parameters(), lr=1e-5)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset = TensorDataset(
-        torch.tensor(np.array(observations), dtype=torch.float32, device=device),
-        torch.tensor(np.array(actions), dtype=torch.long, device=device),
-    )  # Create your dataset
-    dataloader = DataLoader(
-        dataset, batch_size=256, shuffle=True
-    )  # Create your dataloader
-
+    data = list(zip(observations, actions))
+    batch_size = 128
     print(f"Training for {num_epochs} epochs")
     for epoch in tqdm(range(num_epochs), disable=tqdm_disable):
         loss = 0
         num_batch = 0
-        for obs, act in dataloader:
+        random.shuffle(data)
+        # Mini-batch training
+        for batch_start in range(0, len(data), batch_size):
+            batch = data[batch_start : batch_start + batch_size]
+            obs_batch, actions_batch = zip(*batch)
+            obs = torch.tensor(np.array(obs_batch), dtype=torch.float32, device=device)
+            act = torch.tensor(np.array(actions_batch), dtype=torch.long, device=device)
             optimizer.zero_grad()
             predictions = learner.forward(obs)
             action = torch.zeros((act.shape[0], 6), device=device)
