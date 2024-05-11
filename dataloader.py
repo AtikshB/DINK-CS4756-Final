@@ -83,6 +83,9 @@ class AtariDataset:
 
         observations = []
         actions = []
+        rewards = []
+        next_observations = []
+        dones = []
         shuffled_trajs = np.array(list(self.trajectories.keys()))
         np.random.shuffle(shuffled_trajs)
 
@@ -104,5 +107,15 @@ class AtariDataset:
 
                 observations.append(state)
                 actions.append(cur_traj[pid]["action"])
+                rewards.append(cur_traj[pid]["reward"])
+                dones.append(cur_traj[pid]["terminal"])
+                if pid < cur_traj_len - 1:
+                    next_state = (
+                        cv2.imread(
+                            path.join(st_dir, str(pid + 1) + ".png"),
+                            cv2.IMREAD_GRAYSCALE,
+                        )
+                    ).flatten()
+                    next_observations.append(next_state)
 
-        return observations, actions
+        return observations, actions, rewards, next_observations, dones
