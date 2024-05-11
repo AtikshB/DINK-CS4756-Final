@@ -14,13 +14,13 @@ class AtariDataset:
     TRAJS_SUBDIR = "trajectories/spaceinvaders"
     SCREENS_SUBDIR = "screens/spaceinvaders"
 
-    def __init__(self, data_path):
+    def __init__(self, data_path, top):
         """
         Loads the dataset trajectories into memory.
         data_path is the root of the dataset (the folder, which contains
         the 'screens' and 'trajectories' folders.
         """
-
+        self.top = top
         self.open_ai_mappings = {
             0: 0,
             1: 1,
@@ -47,7 +47,8 @@ class AtariDataset:
 
         self.trajectories = self.load_trajectories()
 
-    def load_trajectories(self, top=5):
+    def load_trajectories(self, top=15):
+        top = self.top
 
         # trajectories is a list of tuples (traj_id, traj_data)
         trajectories = []
