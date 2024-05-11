@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch import optim
 import numpy as np
-import tqdm
+from tqdm import tqdm
 import random
 
 
@@ -89,6 +89,7 @@ class DQN(nn.Module):
         Returns:
             int: Selected action.
         """
+        state = state.float()
         q_values = self.forward(state)
         if torch.rand(1).item() < eps:
             return torch.randint(0, q_values.size(1), (1,)).item()
@@ -141,8 +142,10 @@ def train(
 
         # Mini-batch training
         for batch_start in range(0, len(data), batch_size):
-            batch = data[batch_start:batch_start+batch_size]
-            obs_batch, actions_batch, rewards_batch, next_states_batch, dones_batch = zip(*batch)
+            batch = data[batch_start : batch_start + batch_size]
+            obs_batch, actions_batch, rewards_batch, next_states_batch, dones_batch = (
+                zip(*batch)
+            )
             obs_batch = torch.tensor(obs_batch)
             actions_batch = torch.tensor(actions_batch)
             rewards_batch = torch.tensor(rewards_batch)
@@ -150,7 +153,9 @@ def train(
             dones_batch = torch.tensor(dones_batch)
 
             q_vals = network(obs_batch)[torch.arange(len(batch)), actions_batch]
-            target_q_values = network.get_targets(rewards_batch, next_states_batch, dones_batch)
+            target_q_values = network.get_targets(
+                rewards_batch, next_states_batch, dones_batch
+            )
             optimizer.zero_grad()
             loss = torch.nn.functional.mse_loss(q_vals, target_q_values)
             loss.backward()
@@ -159,6 +164,7 @@ def train(
     # Save final agent
     torch.save(network, save_path)
 
+
 # Example function to collect new data
 def collect_data(network, env, num_episodes=1):
     new_data = []
@@ -166,7 +172,9 @@ def collect_data(network, env, num_episodes=1):
         obs = env.reset()
         done = False
         while not done:
-            action = network.get_action(torch.tensor(obs).unsqueeze(0), eps=0.0)  # Greedy action
+            action = network.get_action(
+                torch.tensor(obs).unsqueeze(0), eps=0.0
+            )  # Greedy action
             next_obs, reward, done, _ = env.step(action)
             new_data.append((obs, action, reward, next_obs, done))
             obs = next_obs
