@@ -47,7 +47,7 @@ class AtariDataset:
 
         self.trajectories = self.load_trajectories()
 
-    def load_trajectories(self, top=1):
+    def load_trajectories(self, top=5):
 
         # trajectories is a list of tuples (traj_id, traj_data)
         trajectories = []
@@ -73,6 +73,8 @@ class AtariDataset:
 
         top_trajs = dict(trajectories[:top])
         print(len(top_trajs))
+        scores = [traj[-1]["score"] for traj in top_trajs.values()]
+        print(scores)
         return top_trajs
 
     def compile_data(self):

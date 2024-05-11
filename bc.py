@@ -31,7 +31,7 @@ class SpaceInvLearner(nn.Module):
         return np.array(action.cpu().detach().argmax())
 
 
-def train(learner, observations, actions, checkpoint_path, num_epochs=100):
+def train(learner, observations, actions, checkpoint_path, num_epochs=100, tqdm_disable=False):
     print("Training the learner")
     torch.cuda.empty_cache()
     best_loss = float("inf")
@@ -48,7 +48,7 @@ def train(learner, observations, actions, checkpoint_path, num_epochs=100):
     )  # Create your dataloader
 
     print(f"Training for {num_epochs} epochs")
-    for epoch in tqdm(range(num_epochs)):
+    for epoch in tqdm(range(num_epochs), disable=tqdm_disable):
         loss = 0
         num_batch = 0
         for obs, act in dataloader:
