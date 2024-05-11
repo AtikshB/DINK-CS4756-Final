@@ -2,3 +2,4 @@ __pycache__
 space-inv/
 atari_v1/
 models/*
+*.avi
