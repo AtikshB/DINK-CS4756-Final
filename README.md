@@ -1,7 +1,7 @@
 # DINK: Differently Initialized Q-Networks
 ## (CS4756 Robot Learning Final Project)
 
-A project that analyzes whether different dataset initialization affects the final p
+A project that analyzes whether different dataset initialization affects the final performance of a Q-Network.
 
 ## Atari Grand Challenge Dataset
 Download the SpaceInvaders zip file containing screens and trajectories, and place folder at top level of the repository:
